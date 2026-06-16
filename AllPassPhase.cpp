@@ -5,31 +5,26 @@
 // Created by   : enummusic
 // Description  : Crossover filter phase dispersion
 //
-// © 2020 enummusic
-// VST SDK © 2005, Steinberg Media Technologies, All Rights Reserved
+// (c) 2020 enummusic
+// VST SDK (c) 2005, Steinberg Media Technologies, All Rights Reserved
 //-------------------------------------------------------------------------------------------------------
 
-#include <stdio.h>
 #include <math.h>
-#include <thread>
+#include <stdio.h>
+#include <string.h>
 
-#ifndef __AllPassPhase__
 #include "AllPassPhase.h"
 
-#include "HardClip.h"
-#endif
-
-//----------------------------------------------------------------------------- 
+//-----------------------------------------------------------------------------
 AllPassPhaseProgram::AllPassPhaseProgram ()
 {
 	// default Program Values
 	fFrequency = 0.5131f;
-	fIterations = 0.5;
-	fQ = 0.5;
-	fOut = 0.5;
-	fMix = 1;
+	fIterations = 0.5f;
+	fQ = 0.5f;
+	fMix = 1.0f;
 
-	strcpy (name, "Init");
+	vst_strncpy (name, "Init", sizeof (name));
 }
 
 //-----------------------------------------------------------------------------
@@ -37,16 +32,15 @@ AllPassPhase::AllPassPhase (audioMasterCallback audioMaster)
 	: AudioEffectX (audioMaster, kNumPrograms, kNumParams)
 {
 	// init
-	
+
 	size = 44100;
 	buffer = new float[size];
-	
+
 	programs = new AllPassPhaseProgram[numPrograms];
 	fFrequency = 0.3675f;
-	fQ = 0.5;
-	fIterations = 0.5;
-	fOut = 0.5;
-	fMix = 1;
+	fQ = 0.5f;
+	fIterations = 0.5f;
+	fMix = 1.0f;
 
 	if (programs)
 		setProgram (0);
@@ -56,9 +50,9 @@ AllPassPhase::AllPassPhase (audioMasterCallback audioMaster)
 
 	setUniqueID ('aphs');
 
-	curIterations = 25;
-	freq = pow(200, fFrequency) * 100;
-	q = fQ * sqrt(2);
+	curIterations = getIterationCount();
+	freq = knobToFrequency(fFrequency);
+	q = fQ * sqrt(2.0f);
 	setupFilters();
 
 	resume ();		// flush buffer
@@ -79,15 +73,16 @@ void AllPassPhase::setProgram (long program)
 	AllPassPhaseProgram* ap = &programs[program];
 
 	curProgram = program;
-	setParameter (kFrequency, ap->fFrequency);	
+	setParameter (kFrequency, ap->fFrequency);
+	setParameter (kQ, ap->fQ);
 	setParameter (kIterations, ap->fIterations);
-	//setParameter (kOut, ap->fOut);
+	setParameter (kMix, ap->fMix);
 }
 
 //------------------------------------------------------------------------
 void AllPassPhase::setProgramName (char *name)
 {
-	strcpy (programs[curProgram].name, name);
+	vst_strncpy (programs[curProgram].name, name, sizeof (programs[curProgram].name));
 }
 
 //------------------------------------------------------------------------
@@ -96,7 +91,7 @@ void AllPassPhase::getProgramName (char *name)
 	if (!strcmp (programs[curProgram].name, "Init"))
 		sprintf (name, "%s %d", programs[curProgram].name, curProgram + 1);
 	else
-		strcpy (name, programs[curProgram].name);
+		vst_strncpy (name, programs[curProgram].name, kVstMaxProgNameLen);
 }
 
 //-----------------------------------------------------------------------------------------
@@ -104,7 +99,7 @@ bool AllPassPhase::getProgramNameIndexed (VstInt32 category, VstInt32 index, cha
 {
 	if (index < kNumPrograms)
 	{
-		strcpy (text, programs[index].name);
+		vst_strncpy (text, programs[index].name, kVstMaxProgNameLen);
 		return true;
 	}
 	return false;
@@ -124,33 +119,41 @@ void AllPassPhase::setParameter (VstInt32 index, float value)
 
 	switch (index)
 	{
-		case kFrequency:    
+		case kFrequency:
 			fFrequency = ap->fFrequency = value;
-			programs[curProgram].fFrequency = value;
 			setupFilters();
 			lastfFreq = fFrequency;
 			break;
-		case kQ:		fQ = ap->fQ = value; setupFilters(); break;
-		case kIterations : fIterations = ap->fIterations = value;  break;
-		//case kOut :      fOut = ap->fOut = value;			break;
-		case kMix:		fMix = ap->fMix = value;
+		case kQ:
+			fQ = ap->fQ = value;
+			setupFilters();
+			break;
+		case kIterations:
+			fIterations = ap->fIterations = value;
+			break;
+		case kMix:
+			fMix = ap->fMix = value;
+			break;
 	}
 }
 
-void AllPassPhase::setupFilters() {
+void AllPassPhase::setupFilters()
+{
 	freq = knobToFrequency(fFrequency);
-	q = fQ * sqrt(2);
-	int oldFreq = filterL[0].getFreq();
-	// no, I am not allowing filter self oscillation. it is dangerous for your ears
-	if (q <= 0.005) q = 0.005;
+	q = fQ * sqrt(2.0f);
+	if (q <= 0.005f)
+		q = 0.005f;
+
+	const bool resetFilterState = fabs(fFrequency - lastfFreq) > fFrequency / 10 && freq < 500;
+
 	filterL[0].setup(freq, 44100.0f, q);
 	filterR[0].setup(freq, 44100.0f, q);
-	
-	for (int i = 1; i < fIterations * 50; i++) {
+
+	for (int i = 1; i < getIterationCount(); i++) {
 		filterL[i].copyCoefficientsFrom(filterL[0]);
 		filterR[i].copyCoefficientsFrom(filterR[0]);
-		// attempt to prevent the filters from generating noise that could damage audio equipment
-		if (abs(fFrequency - lastfFreq) > fFrequency / 10 && freq < 500) {//abs(freq - oldFreq) > 25
+
+		if (resetFilterState) {
 			filterL[i].zeroBuffers();
 			filterR[i].zeroBuffers();
 		}
@@ -164,11 +167,18 @@ float AllPassPhase::getParameter (VstInt32 index)
 
 	switch (index)
 	{
-		case kFrequency :    v = fFrequency;	break;
-		case kQ : v = fQ; break;
-		case kIterations : v = fIterations; break;
-		//case kOut :      v = fOut;		break;
-		case kMix: v = fMix;
+		case kFrequency:
+			v = fFrequency;
+			break;
+		case kQ:
+			v = fQ;
+			break;
+		case kIterations:
+			v = fIterations;
+			break;
+		case kMix:
+			v = fMix;
+			break;
 	}
 	return v;
 }
@@ -178,25 +188,36 @@ void AllPassPhase::getParameterName (VstInt32 index, char *label)
 {
 	switch (index)
 	{
-		case kFrequency :    strcpy (label, "Frequency");		break;
-		case kQ : strcpy (label, "Q");	break;
-		case kIterations : strcpy (label, "Intensity");	break;
-		//case kOut :      strcpy (label, "Volume");		break;
-		case kMix:      strcpy(label, "Mix");		break;
+		case kFrequency:
+			vst_strncpy (label, "Frequency", kVstMaxParamStrLen);
+			break;
+		case kQ:
+			vst_strncpy (label, "Q", kVstMaxParamStrLen);
+			break;
+		case kIterations:
+			vst_strncpy (label, "Intensity", kVstMaxParamStrLen);
+			break;
+		case kMix:
+			vst_strncpy(label, "Mix", kVstMaxParamStrLen);
+			break;
 	}
 }
 
-void AllPassPhase::mydB2string(float value, char* text, VstInt32 maxLen)
+// https://www.musicdsp.org/en/latest/Other/260-exponential-curve-for.html
+int AllPassPhase::knobToFrequency(float x)
 {
-	if (value <= 0)
-		vst_strncpy(text, "-oo", maxLen);
-	else
-		float2string((float)(20. * log10(value * 2)), text, maxLen);
+	return floor(exp((16 + x * 100 * 1.20103)*log(1.059))*8.17742);
 }
 
-// https://www.musicdsp.org/en/latest/Other/260-exponential-curve-for.html
-int AllPassPhase::knobToFrequency(float x) {
-	return floor(exp((16 + x * 100 * 1.20103)*log(1.059))*8.17742);
+int AllPassPhase::getIterationCount() const
+{
+	const int iterations = (int)(fIterations * kMaxFilters);
+
+	if (iterations < 0)
+		return 0;
+	if (iterations > kMaxFilters)
+		return kMaxFilters;
+	return iterations;
 }
 
 //------------------------------------------------------------------------
@@ -204,29 +225,23 @@ void AllPassPhase::getParameterDisplay (VstInt32 index, char *text)
 {
 	switch (index)
 	{
-		//case kDelay :    int2string (delay, text, kVstMaxParamStrLen);			break;
 		case kFrequency:
 			int2string(knobToFrequency(fFrequency), text, 5);
 			break;
 		case kQ:
-			float2string(fQ * sqrt(2), text, 4);
+			float2string(fQ * sqrt(2.0f), text, 4);
 			break;
 		case kIterations:
-			if (curIterations == 0) {
-				strcpy(text, "BYPASS");
+			if (getIterationCount() == 0) {
+				vst_strncpy(text, "BYPASS", kVstMaxParamStrLen);
 			}
 			else {
-				int2string(fIterations * 50, text, 5);
+				int2string(getIterationCount(), text, 5);
 			}
 			break;
-		/*
-		case kOut:
-			mydB2string (fOut, text, 4);
-			break;
-		*/
 		case kMix:
 			if (fMix == 0) {
-				strcpy(text, "0");
+				vst_strncpy(text, "0", kVstMaxParamStrLen);
 			}
 			else {
 				int2string(fMix * 100, text, 3);
@@ -240,42 +255,50 @@ void AllPassPhase::getParameterLabel (VstInt32 index, char *label)
 {
 	switch (index)
 	{
-		case kFrequency :    strcpy (label, "Hz");	break;//samples
-		case kQ : strcpy(label, " ");	break;//samples
-		case kIterations : strcpy (label, "iterations");	break;//amount
-		//case kOut :      strcpy (label, "dB");		break;
-		case kMix:      strcpy(label, "%");		break;
-		//case kClip:      float2string(dbginfo, label, kVstMaxParamStrLen);		break;
+		case kFrequency:
+			vst_strncpy (label, "Hz", kVstMaxParamStrLen);
+			break;
+		case kQ:
+			vst_strncpy(label, " ", kVstMaxParamStrLen);
+			break;
+		case kIterations:
+			vst_strncpy (label, "iterations", kVstMaxParamStrLen);
+			break;
+		case kMix:
+			vst_strncpy(label, "%", kVstMaxParamStrLen);
+			break;
 	}
 }
 
 //------------------------------------------------------------------------
 bool AllPassPhase::getEffectName (char* name)
 {
-	strcpy (name, "AllPassPhase");
+	vst_strncpy (name, "AllPassPhase", kVstMaxEffectNameLen);
 	return true;
 }
 
 //------------------------------------------------------------------------
 bool AllPassPhase::getProductString (char* text)
 {
-	strcpy (text, "AllPassPhase");
+	vst_strncpy (text, "AllPassPhase", kVstMaxProductStrLen);
 	return true;
 }
 
 //------------------------------------------------------------------------
 bool AllPassPhase::getVendorString (char* text)
 {
-	strcpy (text, "enummusic");
+	vst_strncpy (text, "enummusic", kVstMaxVendorStrLen);
 	return true;
 }
 
 //---------------------------------------------------------------------------
 void AllPassPhase::processReplacing (float** inputs, float** outputs, VstInt32 sampleFrames)
 {
-	if ((int)(fIterations * 50) > curIterations) {
+	const int targetIterations = getIterationCount();
+
+	if (targetIterations > curIterations) {
 		if (curIterations > 0) {
-			for (int i = curIterations - 1; i < fIterations * 50; i++) {
+			for (int i = curIterations; i < targetIterations; i++) {
 				filterL[i].copyCoefficientsFrom(filterL[curIterations - 1]);
 				filterR[i].copyCoefficientsFrom(filterR[curIterations - 1]);
 			}
@@ -283,16 +306,25 @@ void AllPassPhase::processReplacing (float** inputs, float** outputs, VstInt32 s
 		else {
 			setupFilters();
 		}
-		curIterations = fIterations * 50;
+		curIterations = targetIterations;
 	}
-	else if ((int)(fIterations * 50) < curIterations) {
-		curIterations = fIterations * 50;
+	else if (targetIterations < curIterations) {
+		curIterations = targetIterations;
 	}
 
 	float* in1 = inputs[0];
-	float* in2 = inputs[1];   
+	float* in2 = inputs[1];
 	float* out1 = outputs[0];
 	float* out2 = outputs[1];
+
+	if (curIterations == 0 || fMix <= 0) {
+		int samples = sampleFrames;
+		while (--samples >= 0) {
+			*out1++ = *in1++;
+			*out2++ = *in2++;
+		}
+		return;
+	}
 
 	float *temp1{ new float[sampleFrames] {} };
 	float *temp2{ new float[sampleFrames] {} };
@@ -305,7 +337,7 @@ void AllPassPhase::processReplacing (float** inputs, float** outputs, VstInt32 s
 		// checks the whole buffer
 		// if it sees anything that isn't silence, reset the silence counter
 		// ensures the entire buffer is processed
-		if (abs(*temp1) >= noiseFloor || abs(*temp2) >= noiseFloor) {
+		if (fabs(*temp1) >= noiseFloor || fabs(*temp2) >= noiseFloor) {
 			samplesSinceSilence = 0;
 		}
 		temp1++;
@@ -316,10 +348,9 @@ void AllPassPhase::processReplacing (float** inputs, float** outputs, VstInt32 s
 	temp1 -= sampleFrames;
 	temp2 -= sampleFrames;
 	samples = sampleFrames;
-	
+
 	// filter the audio
-	if (samplesSinceSilence < deactivateAfterSamples && curIterations != 0 && fMix > 0) {
-		// without curIterations != 0 the code sets temp1&2 without processing leftLp etc
+	if (samplesSinceSilence < deactivateAfterSamples) {
 		float *left{ new float[sampleFrames] {} };
 		float *right{ new float[sampleFrames] {} };
 
@@ -344,18 +375,20 @@ void AllPassPhase::processReplacing (float** inputs, float** outputs, VstInt32 s
 	in1 -= sampleFrames;
 	in2 -= sampleFrames;
 
+	const float dryMix = 1.0f - fMix;
+
 	while (--samples >= 0) {
 
 		// if it sees anything that isn't silence, reset the silence counter
-		if (abs(*temp1) >= noiseFloor || abs(*temp2) >= noiseFloor) {
+		if (fabs(*temp1) >= noiseFloor || fabs(*temp2) >= noiseFloor) {
 			samplesSinceSilence = 0;
 		}
 		else if (samplesSinceSilence < 32768) { // int overflow protection
 			samplesSinceSilence++;
 		}
 
-		*out1 = (*temp1 * fMix + *in1 * (1 - fMix)); // * fOut  * 2
-		*out2 = (*temp2 * fMix + *in2 * (1 - fMix)); // * fOut  * 2
+		*out1 = (*temp1 * fMix + *in1 * dryMix);
+		*out2 = (*temp2 * fMix + *in2 * dryMix);
 
 		in1++;
 		in2++;

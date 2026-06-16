@@ -1,9 +1,8 @@
 // https://www.musicdsp.org/en/latest/Filters/266-4th-order-linkwitz-riley-filters.html
-// © All credits go to the contributors at musicdsp.org
+// (c) All credits go to the contributors at musicdsp.org
 
-#include <iostream>
-#include <stdio.h>
-#include <math.h>
+#ifndef __LRCrossoverFilter__
+#define __LRCrossoverFilter__
 
 
 class LRCrossoverFilter { // LR4 crossover filter
@@ -11,8 +10,7 @@ private:
 
 	// coefficient calculations are all changed to double
 	// for filter stability at low frequencies
-	double tempx, tempyH, tempyL;
-	struct filterCoefficents {
+	struct filterCoefficients {
 		double a0, a1, a2, a3, a4;
 	} lpco, hpco;
 
@@ -29,10 +27,12 @@ private:
 	float coFreqRunningAv = 100.0f;
 public:
 	void setup(float crossoverFrequency, float sr);
-	void copyCoefficientsFrom(LRCrossoverFilter filter);
+	void copyCoefficientsFrom(const LRCrossoverFilter& filter);
 	void zeroBuffers();
 	void processBlock(float * in, float * outHP, float * outLP, int numSamples);
 	float getCrossover() {
 		return coFreqRunningAv;
 	}
 };
+
+#endif

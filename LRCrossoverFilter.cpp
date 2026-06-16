@@ -1,40 +1,39 @@
 // https://www.musicdsp.org/en/latest/Filters/266-4th-order-linkwitz-riley-filters.html
-// © All credits go to the contributors at musicdsp.org
+// (c) All credits go to the contributors at musicdsp.org
 
-#include <iostream>
-#include <stdio.h>
 #include <math.h>
 
 #include "LRCrossoverFilter.h"
 
 
-void LRCrossoverFilter::setup(float crossoverFrequency, float sr) {
+void LRCrossoverFilter::setup(float crossoverFrequency, float sr)
+{
 
 	// coefficient calculations are all changed to double
 	// for filter stability at low frequencies
 
-	const double pi = 3.141592654f;
+	const double pi = 3.14159265358979323846;
 
 	coFreqRunningAv = crossoverFrequency;
 
-	double cowc = 2 * pi*coFreqRunningAv;
+	double cowc = 2 * pi * coFreqRunningAv;
 	double cowc2 = cowc * cowc;
 	double cowc3 = cowc2 * cowc;
 	double cowc4 = cowc2 * cowc2;
 
-	double cok = cowc / tan(pi*coFreqRunningAv / sr);
+	double cok = cowc / tan(pi * coFreqRunningAv / sr);
 	double cok2 = cok * cok;
 	double cok3 = cok2 * cok;
 	double cok4 = cok2 * cok2;
 	double sqrt2 = sqrt(2);
 	double sq_tmp1 = sqrt2 * cowc3 * cok;
 	double sq_tmp2 = sqrt2 * cowc * cok3;
-	double a_tmp = 4 * cowc2*cok2 + 2 * sq_tmp1 + cok4 + 2 * sq_tmp2 + cowc4;
+	double a_tmp = 4 * cowc2 * cok2 + 2 * sq_tmp1 + cok4 + 2 * sq_tmp2 + cowc4;
 
 	b1co = (4 * (cowc4 + sq_tmp1 - cok4 - sq_tmp2)) / a_tmp;
-	b2co = (6 * cowc4 - 8 * cowc2*cok2 + 6 * cok4) / a_tmp;
+	b2co = (6 * cowc4 - 8 * cowc2 * cok2 + 6 * cok4) / a_tmp;
 	b3co = (4 * (cowc4 - sq_tmp1 + sq_tmp2 - cok4)) / a_tmp;
-	b4co = (cok4 - 2 * sq_tmp1 + cowc4 - 2 * sq_tmp2 + 4 * cowc2*cok2) / a_tmp;
+	b4co = (cok4 - 2 * sq_tmp1 + cowc4 - 2 * sq_tmp2 + 4 * cowc2 * cok2) / a_tmp;
 
 
 
@@ -59,7 +58,8 @@ void LRCrossoverFilter::setup(float crossoverFrequency, float sr) {
 	zeroBuffers();
 }
 
-void LRCrossoverFilter::copyCoefficientsFrom(LRCrossoverFilter filter) {
+void LRCrossoverFilter::copyCoefficientsFrom(const LRCrossoverFilter& filter)
+{
 	lpco.a0 = filter.lpco.a0;
 	lpco.a1 = filter.lpco.a1;
 	lpco.a2 = filter.lpco.a2;
@@ -80,7 +80,8 @@ void LRCrossoverFilter::copyCoefficientsFrom(LRCrossoverFilter filter) {
 	zeroBuffers();
 }
 
-void LRCrossoverFilter::zeroBuffers() {
+void LRCrossoverFilter::zeroBuffers()
+{
 	hptemp.ym1 = 0;
 	hptemp.ym2 = 0;
 	hptemp.ym3 = 0;
@@ -95,17 +96,19 @@ void LRCrossoverFilter::zeroBuffers() {
 	temp.xm4 = 0;
 }
 
-void LRCrossoverFilter::processBlock(float * in, float * outHP, float * outLP, int numSamples) {
-	float tempx, tempy;
+void LRCrossoverFilter::processBlock(float * in, float * outHP, float * outLP, int numSamples)
+{
+	float tempx;
 	for (int i = 0; i < numSamples; i++) {
 		tempx = in[i];
+		double tempyH, tempyL;
 
 		// High pass
-		tempyH = hpco.a0*tempx +
-			hpco.a1*temp.xm1 +
-			hpco.a2*temp.xm2 +
-			hpco.a3*temp.xm3 +
-			hpco.a4*temp.xm4 -
+		tempyH = hpco.a0 * tempx +
+			hpco.a1 * temp.xm1 +
+			hpco.a2 * temp.xm2 +
+			hpco.a3 * temp.xm3 +
+			hpco.a4 * temp.xm4 -
 			b1co * hptemp.ym1 -
 			b2co * hptemp.ym2 -
 			b3co * hptemp.ym3 -
@@ -119,11 +122,11 @@ void LRCrossoverFilter::processBlock(float * in, float * outHP, float * outLP, i
 		outHP[i] = tempyH;
 
 		// Low pass
-		tempyL = lpco.a0*tempx +
-			lpco.a1*temp.xm1 +
-			lpco.a2*temp.xm2 +
-			lpco.a3*temp.xm3 +
-			lpco.a4*temp.xm4 -
+		tempyL = lpco.a0 * tempx +
+			lpco.a1 * temp.xm1 +
+			lpco.a2 * temp.xm2 +
+			lpco.a3 * temp.xm3 +
+			lpco.a4 * temp.xm4 -
 			b1co * lptemp.ym1 -
 			b2co * lptemp.ym2 -
 			b3co * lptemp.ym3 -

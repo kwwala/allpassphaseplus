@@ -3,14 +3,13 @@
 // https://www.musicdsp.org/en/latest/Filters/64-biquad-c-code.html
 // https://www.musicdsp.org/en/latest/Filters/266-4th-order-linkwitz-riley-filters.html
 
-#include <iostream>
-#include <stdio.h>
 #include <math.h>
 
 #include "AllPassFilter.h"
 
 
-void AllPassFilter::setup(float freq, float sr, float q) {
+void AllPassFilter::setup(float freq, float sr, float q)
+{
 
 	// coefficient calculations need to be in double
 	// for filter stability at low frequencies
@@ -39,7 +38,7 @@ void AllPassFilter::setup(float freq, float sr, float q) {
 	a0 = 1 + alpha;
 	a1 = -2 * cosw0;
 	a2 = 1 - alpha;*/
-	
+
 	co.c0 = b0 / a0;
 	co.c1 = b1 / a0;
 	co.c2 = b2 / a0;
@@ -49,7 +48,8 @@ void AllPassFilter::setup(float freq, float sr, float q) {
 	//zeroBuffers();
 }
 
-void AllPassFilter::copyCoefficientsFrom(AllPassFilter filter) {
+void AllPassFilter::copyCoefficientsFrom(const AllPassFilter& filter)
+{
 	co.c0 = filter.co.c0;
 	co.c1 = filter.co.c1;
 	co.c2 = filter.co.c2;
@@ -59,14 +59,16 @@ void AllPassFilter::copyCoefficientsFrom(AllPassFilter filter) {
 	//zeroBuffers();
 }
 
-void AllPassFilter::zeroBuffers() {
+void AllPassFilter::zeroBuffers()
+{
 	temp.xm1 = 0;
 	temp.xm2 = 0;
 	temp.ym1 = 0;
 	temp.ym2 = 0;
 }
 
-void AllPassFilter::processBlock(float * in, float * out, int numSamples) {
+void AllPassFilter::processBlock(float * in, float * out, int numSamples)
+{
 	float tempx, tempy;
 	for (int i = 0; i < numSamples; i++) {
 		tempx = in[i];
