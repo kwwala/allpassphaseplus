@@ -177,5 +177,5 @@ When debugging:
 - A good commit message for documentation-only agent guidance is:
 
   ```text
-  docs: update agent guidance
+  update agent guidance
   ```
