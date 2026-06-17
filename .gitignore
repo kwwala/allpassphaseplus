@@ -30,3 +30,11 @@
 *.exe
 *.out
 *.app
+
+# CMake/JUCE build output
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+_deps/
+*.vst3
