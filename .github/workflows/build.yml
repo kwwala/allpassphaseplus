@@ -26,5 +26,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: AllPassPhase-vst3
-          path: build/AllPassPhase_artefacts/Release/VST3/AllPassPhase+.vst3
+          path: build/AllPassPhase_artefacts/Release/VST3/AllPassPhase.vst3
           if-no-files-found: error
