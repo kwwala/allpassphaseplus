@@ -4,13 +4,20 @@ on:
   push:
     branches:
       - main
+    tags:
+      - '*'
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   vst3:
     name: build vst3
     runs-on: windows-2022
+    outputs:
+      asset_name: ${{ steps.package.outputs.asset_name }}
 
     steps:
       - name: checkout
@@ -22,9 +29,73 @@ jobs:
       - name: build
         run: cmake --build build --config Release --target AllPassPhase_VST3
 
-      - name: upload vst3
+      - name: package vst3
+        id: package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $vst3Path = 'build/AllPassPhase_artefacts/Release/VST3/AllPassPhase+.vst3'
+          if (-not (Test-Path -LiteralPath $vst3Path)) {
+            throw "vst3 bundle not found at $vst3Path"
+          }
+
+          $sha = '${{ github.sha }}'
+          $version = $sha.Substring(0, 7)
+          if ('${{ github.ref_type }}' -eq 'tag') {
+            $version = '${{ github.ref_name }}'
+          }
+
+          $safeVersion = $version -replace '[\\/:*?"<>|]', '-'
+          $assetName = "AllPassPhasePlus-$safeVersion-windows-vst3.zip"
+          Compress-Archive -LiteralPath $vst3Path -DestinationPath $assetName -Force
+
+          "asset_name=$assetName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: upload build artifact
         uses: actions/upload-artifact@v7
         with:
-          name: AllPassPhase-vst3
-          path: build/AllPassPhase_artefacts/Release/VST3/AllPassPhase.vst3
+          name: AllPassPhasePlus-windows-vst3
+          path: ${{ steps.package.outputs.asset_name }}
           if-no-files-found: error
+
+  release:
+    name: publish release
+    runs-on: windows-2022
+    needs: vst3
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    permissions:
+      contents: write
+
+    steps:
+      - name: download build artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: AllPassPhasePlus-windows-vst3
+          path: release
+
+      - name: publish release asset
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $tag = '${{ github.ref_name }}'
+          $asset = Join-Path 'release' '${{ needs.vst3.outputs.asset_name }}'
+          if (-not (Test-Path -LiteralPath $asset)) {
+            throw "release asset not found at $asset"
+          }
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $asset --clobber
+            if ($LASTEXITCODE -ne 0) {
+              throw "failed to upload $asset to release $tag"
+            }
+          } else {
+            gh release create $tag $asset --title $tag --generate-notes
+            if ($LASTEXITCODE -ne 0) {
+              throw "failed to create release $tag"
+            }
+          }
