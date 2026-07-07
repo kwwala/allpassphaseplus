@@ -7,6 +7,9 @@ on:
     tags:
       - '*'
   pull_request:
+  release:
+    types:
+      - published
   workflow_dispatch:
 
 permissions:
@@ -42,7 +45,10 @@ jobs:
 
           $sha = '${{ github.sha }}'
           $version = $sha.Substring(0, 7)
-          if ('${{ github.ref_type }}' -eq 'tag') {
+          $releaseTag = '${{ github.event.release.tag_name }}'
+          if (-not [string]::IsNullOrWhiteSpace($releaseTag)) {
+            $version = $releaseTag
+          } elseif ('${{ github.ref_type }}' -eq 'tag') {
             $version = '${{ github.ref_name }}'
           }
 
@@ -63,7 +69,7 @@ jobs:
     name: publish release
     runs-on: windows-2022
     needs: vst3
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: (github.event_name == 'push' && github.ref_type == 'tag') || github.event_name == 'release'
     permissions:
       contents: write
 
@@ -81,7 +87,11 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          $tag = '${{ github.ref_name }}'
+          $tag = '${{ github.event.release.tag_name }}'
+          if ([string]::IsNullOrWhiteSpace($tag)) {
+            $tag = '${{ github.ref_name }}'
+          }
+
           $asset = Join-Path 'release' '${{ needs.vst3.outputs.asset_name }}'
           if (-not (Test-Path -LiteralPath $asset)) {
             throw "release asset not found at $asset"
